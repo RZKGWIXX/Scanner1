@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>Crypto Scanner — Neural Network</title>
+  <title>Crypto Scanner</title>
   <link rel="stylesheet" href="/styles.css" />
   <script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js"></script>
 </head>
@@ -29,7 +29,7 @@
             </div>
             <div class="rate-badge">
               <span class="badge-icon">🎯</span>
-              <span id="headerRate">5%</span>
+              <span id="headerRate">10%</span>
             </div>
           </div>
         </div>
@@ -39,7 +39,7 @@
     <main id="pages">
       <!-- SCAN -->
       <section id="page-scan" class="page active">
-        <div class="card status-card glow-effect" id="neuralStatusCard" style="display: none;">
+        <div class="card status-card glow-effect">
           <div class="neural-header">
             <div class="status-title">
               <span class="pulse-dot"></span>
@@ -65,7 +65,7 @@
             </div>
             <div class="status-row separator">
               <span class="status-label">AI Status:</span>
-              <span class="status-value ai-text" id="statusAI">Scanning blockchain...</span>
+              <span class="status-value ai-text" id="statusAI">Ready to scan</span>
             </div>
             <div class="status-row stats-row">
               <div class="stat-item">
@@ -79,24 +79,6 @@
               <div class="stat-item">
                 <span class="stat-label">Status</span>
                 <span class="stat-value online" id="statusOnline">●</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="card welcome-card glow-effect" id="welcomeCard">
-          <div class="welcome-content">
-            <div class="welcome-icon">🚀</div>
-            <h2>Welcome to Neural Scanner</h2>
-            <p class="welcome-text">Start scanning blockchain to discover cryptocurrency in abandoned wallets</p>
-            <div class="welcome-stats">
-              <div class="welcome-stat">
-                <div class="stat-number" id="totalScanned">0</div>
-                <div class="stat-label">Wallets Scanned</div>
-              </div>
-              <div class="welcome-stat">
-                <div class="stat-number">$<span id="welcomeTotalUsd">0.00</span></div>
-                <div class="stat-label">Total Found</div>
               </div>
             </div>
           </div>
@@ -149,7 +131,7 @@
             <div class="boost-label">Scanning Speed</div>
             <div class="find-row">
               <span>Find Rate</span>
-              <div class="badge green pulse">5%</div>
+              <div class="badge green pulse">10%</div>
             </div>
             <div class="price-row">
               <div class="price">10 <span class="currency">TON</span></div>
@@ -168,7 +150,7 @@
             <div class="boost-label">Scanning Speed</div>
             <div class="find-row">
               <span>Find Rate</span>
-              <div class="badge purple pulse">10%</div>
+              <div class="badge purple pulse">30%</div>
             </div>
             <div class="price-row">
               <div class="price">30 <span class="currency">TON</span></div>
@@ -186,7 +168,7 @@
             <div class="boost-label">Scanning Speed</div>
             <div class="find-row">
               <span>Find Rate</span>
-              <div class="badge orange pulse">20%</div>
+              <div class="badge orange pulse">50%</div>
             </div>
             <div class="price-row">
               <div class="price">100 <span class="currency">TON</span></div>
@@ -204,7 +186,7 @@
             <div class="boost-label">Scanning Speed</div>
             <div class="find-row">
               <span>Find Rate</span>
-              <div class="badge red pulse">30%</div>
+              <div class="badge red pulse">70%</div>
             </div>
             <div class="price-row">
               <div class="price">130 <span class="currency">TON</span></div>
@@ -233,7 +215,7 @@
               <div class="benefit-icon gradient-text">🎯</div>
               <div class="benefit-content">
                 <div class="benefit-title">Higher Discovery</div>
-                <div class="benefit-desc">30% find rate vs 5% base rate</div>
+                <div class="benefit-desc">70% find rate vs 10% base rate</div>
               </div>
             </div>
             <div class="benefit-item">
@@ -293,6 +275,24 @@
         <span class="nav-label">Balance</span>
       </button>
     </nav>
+  </div>
+
+  <!-- Withdraw Modal -->
+  <div id="withdrawModal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>⚠️ Boost Required</h3>
+        <button class="modal-close" onclick="closeWithdrawModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <p>Withdrawals are only available with an active boost package.</p>
+        <p>Purchase a boost to unlock withdrawal capabilities!</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn gradient-btn" onclick="goToBoostPage()">View Boost Packages</button>
+        <button class="btn" onclick="closeWithdrawModal()">Cancel</button>
+      </div>
+    </div>
   </div>
 
   <script src="/app.js"></script>
