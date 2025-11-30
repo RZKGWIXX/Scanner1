@@ -1,7 +1,7 @@
 {
   "name": "neural-crypto-scanner",
   "version": "3.0.0",
-  "description": "Neural Network Crypto Scanner with Real TON Payments & Dark Futuristic Design",
+  "description": "Neural Network Crypto Scanner",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -14,26 +14,11 @@
     "body-parser": "^1.20.2",
     "cors": "^2.8.5",
     "express": "^4.18.2",
-    "express-session": "^1.17.3"
+    "express-session": "^1.17.3",
+    "node-fetch": "^2.6.7"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
   },
-  "keywords": [
-    "crypto",
-    "scanner",
-    "ton",
-    "blockchain",
-    "neural-network",
-    "telegram-bot",
-    "web3",
-    "cryptocurrency",
-    "ton-connect"
-  ],
-  "author": "",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/yourusername/neural-crypto-scanner"
-  }
+  "license": "MIT"
 }
