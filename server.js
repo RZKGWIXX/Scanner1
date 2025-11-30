@@ -63,10 +63,17 @@ function ensureUser(req) {
   return req.session.user;
 }
 
-// CoinGecko with retry and cache
+// CoinGecko with retry and cache + fallback prices
 let priceCache = {};
 let lastFetch = 0;
 const CACHE_TIME = 60000; // 1 minute
+
+// Fallback prices if API fails
+const FALLBACK_PRICES = {
+  TON: 5.50, BTC: 98000, ETH: 3500,
+  SOL: 190, TRX: 0.24, BNB: 650,
+  LTC: 105, USDT: 1.0, USDC: 1.0
+};
 
 async function fetchPrices(symbols) {
   const now = Date.now();
@@ -75,7 +82,7 @@ async function fetchPrices(symbols) {
   }
 
   const ids = symbols.map(s => COIN_MAP[s]).filter(Boolean).join(',');
-  if (!ids) return {};
+  if (!ids) return FALLBACK_PRICES;
   
   try {
     const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`;
@@ -85,23 +92,23 @@ async function fetchPrices(symbols) {
     });
     
     if (!resp.ok) {
-      console.warn('CoinGecko API returned:', resp.status);
-      return priceCache; // Return cached if available
+      console.warn('CoinGecko API returned:', resp.status, '- using fallback prices');
+      return Object.keys(priceCache).length > 0 ? priceCache : FALLBACK_PRICES;
     }
     
     const data = await resp.json();
     const out = {};
     for (const s of symbols) {
       const id = COIN_MAP[s];
-      out[s] = data[id] && data[id].usd ? Number(data[id].usd) : 0;
+      out[s] = data[id] && data[id].usd ? Number(data[id].usd) : (FALLBACK_PRICES[s] || 0);
     }
     
     priceCache = out;
     lastFetch = now;
     return out;
   } catch (e) {
-    console.error('Price fetch error:', e.message);
-    return priceCache; // Return cached prices
+    console.error('Price fetch error:', e.message, '- using fallback prices');
+    return Object.keys(priceCache).length > 0 ? priceCache : FALLBACK_PRICES;
   }
 }
 
@@ -272,57 +279,6 @@ app.post('/api/scan-wallet', async (req, res) => {
       scannedWallets: user.scannedWallets,
       speedMultiplier: user.speedMultiplier,
       statusOnline: user.statusOnline
-    });
-  }
-});
-
-app.post('/api/withdraw', async (req, res) => {
-  const { crypto, amount } = req.body;
-  const user = ensureUser(req);
-  
-  if (!user.boost || !user.boost.purchased) {
-    return res.status(400).json({ error: 'Withdraw requires active boost package' });
-  }
-  
-  const c = crypto || 'TON';
-  const amt = Number(amount);
-  
-  if (!amt || amt <= 0) return res.status(400).json({ error: 'Invalid amount' });
-  if (!user.balances[c] || user.balances[c] < amt) {
-    return res.status(400).json({ error: 'Insufficient balance' });
-  }
-  
-  user.balances[c] = Number((user.balances[c] - amt).toFixed(8));
-  
-  try {
-    const prices = await fetchPrices(Object.keys(user.balances));
-    const usdBalances = {};
-    let totalUsd = 0;
-    
-    for (const sym of Object.keys(user.balances)) {
-      const bal = Number(user.balances[sym] || 0);
-      const price = Number(prices[sym] || 0);
-      const usd = bal * price;
-      usdBalances[sym] = { 
-        price: price, 
-        usd: Number(usd.toFixed(2)),
-        balance: bal
-      };
-      totalUsd += usd;
-    }
-    
-    res.json({ 
-      success: true, 
-      message: `Withdraw ${amt} ${c} processed`,
-      balances: user.balances,
-      usdBalances,
-      totalUsd: Number(totalUsd.toFixed(2))
-    });
-  } catch (e) {
-    res.json({ 
-      success: true, 
-      message: `Withdraw ${amt} ${c} processed`,
-      balances: user.balances
     });
   }
 });
