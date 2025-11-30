@@ -281,16 +281,34 @@
   <div id="withdrawModal" class="modal hidden">
     <div class="modal-content">
       <div class="modal-header">
-        <h3>⚠️ Boost Required</h3>
+        <h3>⚡ Boost Required for Withdrawal</h3>
         <button class="modal-close" onclick="closeWithdrawModal()">×</button>
       </div>
       <div class="modal-body">
-        <p>Withdrawals are only available with an active boost package.</p>
-        <p>Purchase a boost to unlock withdrawal capabilities!</p>
+        <div class="modal-icon">🔒</div>
+        <p class="modal-title">Unlock Withdrawal Feature</p>
+        <p class="modal-text">To withdraw your crypto, you need to purchase at least a <strong>Basic Boost</strong> package.</p>
+        <div class="boost-requirements">
+          <div class="requirement-item">
+            <span class="req-icon">✓</span>
+            <span class="req-text">Minimum: <strong>Basic Boost (10 TON)</strong></span>
+          </div>
+          <div class="requirement-item">
+            <span class="req-icon">✓</span>
+            <span class="req-text">Get 10x scanning speed</span>
+          </div>
+          <div class="requirement-item">
+            <span class="req-icon">✓</span>
+            <span class="req-text">Unlock withdrawal capabilities</span>
+          </div>
+        </div>
       </div>
       <div class="modal-footer">
-        <button class="btn gradient-btn" onclick="goToBoostPage()">View Boost Packages</button>
-        <button class="btn" onclick="closeWithdrawModal()">Cancel</button>
+        <button class="btn gradient-btn full" onclick="goToBoostPage()">
+          <span class="btn-icon">⚡</span>
+          <span>Purchase Boost</span>
+        </button>
+        <button class="btn full" onclick="closeWithdrawModal()">Maybe Later</button>
       </div>
     </div>
   </div>
