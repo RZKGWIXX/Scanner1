@@ -1,4 +1,4 @@
-// server.js
+// server.js - ПОВНИЙ КОД
 const express = require('express');
 const bodyParser = require('body-parser');
 const session = require('express-session');
@@ -12,9 +12,8 @@ const PORT = process.env.PORT || 3000;
 const TON_RECEIVE_ADDRESS = process.env.TON_ADDRESS || 'UQAhk2ixejZ9_K0MPQjH3CUN4_PSDUfZEGaXtKU78nh-0Fdn';
 const ADMIN_TELEGRAM_ID = 5076024106;
 
-// JSON Bin Configuration
-const JSONBIN_COLLECTION_ID = process.env.JSONBIN_COLLECTION_ID || '692dd5ef43b1c97be9d100f1';
-const JSONBIN_API_KEY = process.env.JSONBIN_API_KEY || '';
+const JSONBIN_BIN_USERS = process.env.JSONBIN_BIN_USERS || '692dd82943b1c97be9d105d4';
+const JSONBIN_API_KEY = process.env.JSONBIN_API_KEY || '$2a$10$55zsaZTNPxCxppuvAILP7eSeTe4gcVhcr6d1Vw33u69Eu8cfn.QhO';
 const DB_MODE = process.env.DB_MODE || 'memory';
 
 const COIN_MAP = {
@@ -33,7 +32,6 @@ const CRYPTO_FIND_RATES = {
   LTC: 0.010, TON: 0.015, USDT: 0.025, USDC: 0.025, TRX: 0.030
 };
 
-// In-memory user storage (замість бази даних)
 const users = new Map();
 
 app.use(cors());
@@ -64,6 +62,13 @@ function getUserKey(req) {
 function ensureUser(req) {
   const userKey = getUserKey(req);
   
+  // Спочатку перевіряємо чи є користувач в глобальному сховищі
+  if (users.has(userKey)) {
+    req.session.user = users.get(userKey);
+    return req.session.user;
+  }
+  
+  // Якщо немає в сесії - створюємо нового
   if (!req.session.user) {
     req.session.user = {
       balances: Object.assign({}, DEFAULT_BALANCES),
@@ -81,15 +86,60 @@ function ensureUser(req) {
     };
   }
   
-  // Зберігаємо користувача в глобальному сховищі
-  if (!users.has(userKey)) {
-    users.set(userKey, req.session.user);
-  } else {
-    // Синхронізуємо з глобальним сховищем
-    req.session.user = users.get(userKey);
-  }
-  
+  users.set(userKey, req.session.user);
   return req.session.user;
+}
+
+// JSONBin функції
+async function loadUsersFromJSONBin() {
+  if (DB_MODE !== 'jsonbin') return;
+  
+  try {
+    const response = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_USERS}/latest`, {
+      headers: {
+        'X-Master-Key': JSONBIN_API_KEY
+      }
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      if (data.record && data.record.users) {
+        const usersArray = data.record.users;
+        users.clear();
+        usersArray.forEach(user => {
+          const key = user.telegramUser?.id ? `tg_${user.telegramUser.id}` : user.key;
+          users.set(key, user);
+        });
+        console.log(`✓ Loaded ${users.size} users from JSONBin`);
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load users from JSONBin:', e);
+  }
+}
+
+async function saveUsersToJSONBin() {
+  if (DB_MODE !== 'jsonbin') return;
+  
+  try {
+    const usersArray = Array.from(users.entries()).map(([key, user]) => ({
+      ...user,
+      key: key
+    }));
+    
+    await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_USERS}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': JSONBIN_API_KEY
+      },
+      body: JSON.stringify({ users: usersArray })
+    });
+    
+    console.log(`✓ Saved ${usersArray.length} users to JSONBin`);
+  } catch (e) {
+    console.error('Failed to save users to JSONBin:', e);
+  }
 }
 
 let priceCache = {};
@@ -146,7 +196,6 @@ app.get('/api/profile', async (req, res) => {
       totalUsd += usd;
     }
     
-    // Перевірка чи адмін
     const isAdmin = user.telegramUser && user.telegramUser.id === ADMIN_TELEGRAM_ID;
     console.log('Is admin:', isAdmin, 'ID:', user.telegramUser?.id);
     
@@ -179,22 +228,67 @@ app.post('/api/store-ton', (req, res) => {
   const userKey = getUserKey(req);
   users.set(userKey, user);
   
+  if (DB_MODE === 'jsonbin') saveUsersToJSONBin();
+  
   res.json({ success: true, address });
 });
 
 app.post('/api/store-telegram', (req, res) => {
   const { telegramUser } = req.body;
-  const user = ensureUser(req);
-  if (!telegramUser) return res.status(400).json({ error: 'telegramUser required' });
-  user.telegramUser = telegramUser;
   
-  // Важно: обновляем ключ после установки telegramUser
-  const userKey = getUserKey(req);
-  users.set(userKey, user);
+  console.log('=== STORE TELEGRAM REQUEST ===');
+  console.log('Received telegramUser:', telegramUser);
+  console.log('Session ID:', req.sessionID);
+  
+  if (!telegramUser) {
+    console.log('ERROR: No telegramUser provided');
+    return res.status(400).json({ error: 'telegramUser required' });
+  }
+  
+  // Спочатку отримуємо/створюємо користувача ЗІ СТАРИМ КЛЮЧЕМ (session)
+  const oldKey = getUserKey(req);
+  console.log('Old user key:', oldKey);
+  
+  let user = req.session.user;
+  if (!user) {
+    user = {
+      balances: Object.assign({}, DEFAULT_BALANCES),
+      boost: null,
+      tonAddress: null,
+      findRate: 0.10,
+      scannedWallets: 0,
+      speedMultiplier: 1,
+      statusOnline: true,
+      wallet: { 
+        address: generateWalletAddress(),
+        network: 'Binance Smart Chain'
+      },
+      telegramUser: null
+    };
+  }
+  
+  // Встановлюємо telegramUser
+  user.telegramUser = telegramUser;
+  req.session.user = user;
+  
+  // Новий ключ з Telegram ID
+  const newKey = `tg_${telegramUser.id}`;
+  console.log('New user key:', newKey);
+  
+  // Якщо це інший ключ - переносимо дані
+  if (oldKey !== newKey && users.has(oldKey)) {
+    console.log('Migrating user data from', oldKey, 'to', newKey);
+    users.delete(oldKey);
+  }
+  
+  // Зберігаємо з новим ключем
+  users.set(newKey, user);
   
   console.log('Telegram user stored:', telegramUser.username, 'ID:', telegramUser.id);
-  console.log('User key:', userKey);
   console.log('Total users in map:', users.size);
+  console.log('=== END STORE TELEGRAM ===');
+  
+  if (DB_MODE === 'jsonbin') saveUsersToJSONBin();
   
   res.json({ success: true, telegramUser });
 });
@@ -214,6 +308,8 @@ app.post('/api/confirm-boost', (req, res) => {
     
     const userKey = getUserKey(req);
     users.set(userKey, user);
+    
+    if (DB_MODE === 'jsonbin') saveUsersToJSONBin();
     
     return res.json({ success: true, boost: user.boost, speedMultiplier: user.speedMultiplier, findRate: user.findRate });
   } catch (e) {
@@ -313,47 +409,6 @@ app.get('/api/admin/stats', (req, res) => {
   });
 });
 
-app.post('/api/admin/search', (req, res) => {
-  const user = ensureUser(req);
-  const { query } = req.body;
-  
-  if (!user.telegramUser || user.telegramUser.id !== ADMIN_TELEGRAM_ID) {
-    return res.status(403).json({ error: 'Access denied' });
-  }
-  
-  if (!query || query.trim().length === 0) {
-    return res.json({ users: [] });
-  }
-  
-  const results = [];
-  const searchQuery = query.toLowerCase().trim();
-  
-  users.forEach((userData, key) => {
-    if (userData.telegramUser) {
-      const username = userData.telegramUser.username || '';
-      const firstName = userData.telegramUser.first_name || '';
-      const userId = String(userData.telegramUser.id || '');
-      
-      if (username.toLowerCase().includes(searchQuery) || 
-          firstName.toLowerCase().includes(searchQuery) ||
-          userId.includes(searchQuery)) {
-        results.push({
-          key: key,
-          telegramUser: userData.telegramUser,
-          boost: userData.boost,
-          balances: userData.balances,
-          totalUsd: calculateTotalUsd(userData.balances),
-          speedMultiplier: userData.speedMultiplier,
-          findRate: userData.findRate,
-          scannedWallets: userData.scannedWallets
-        });
-      }
-    }
-  });
-  
-  res.json({ users: results });
-});
-
 app.post('/api/admin/search-user', (req, res) => {
   const user = ensureUser(req);
   const { username } = req.body;
@@ -405,25 +460,22 @@ app.post('/api/admin/search-user', (req, res) => {
 
 app.post('/api/admin/grant-boost', (req, res) => {
   const admin = ensureUser(req);
-  const { userId, boostAmount, userKey } = req.body;
+  const { userId, boostAmount } = req.body;
   
   if (!admin.telegramUser || admin.telegramUser.id !== ADMIN_TELEGRAM_ID) {
     return res.status(403).json({ error: 'Access denied' });
   }
   
-  if ((!userKey && !userId) || !boostAmount) {
+  if (!userId || !boostAmount) {
     return res.status(400).json({ error: 'Invalid params' });
   }
   
-  let targetUserKey = userKey;
+  let targetUserKey = null;
   
-  // If userId is provided, find the userKey
-  if (!targetUserKey && userId) {
-    for (const [key, userData] of users) {
-      if (userData.telegramUser && userData.telegramUser.id === userId) {
-        targetUserKey = key;
-        break;
-      }
+  for (const [key, userData] of users) {
+    if (userData.telegramUser && userData.telegramUser.id === userId) {
+      targetUserKey = key;
+      break;
     }
   }
   
@@ -452,6 +504,8 @@ app.post('/api/admin/grant-boost', (req, res) => {
   
   users.set(targetUserKey, targetUser);
   
+  if (DB_MODE === 'jsonbin') saveUsersToJSONBin();
+  
   res.json({
     success: true,
     message: `Boost ${boostAmount} TON granted successfully`,
@@ -474,36 +528,17 @@ function calculateTotalUsd(balances) {
   return Number(total.toFixed(2));
 }
 
-app.post('/api/withdraw', (req, res) => {
-  const user = ensureUser(req);
-  const { crypto, amount } = req.body;
-  
-  if (!crypto || !amount) {
-    return res.status(400).json({ error: 'Invalid params' });
-  }
-  
-  if (!user.boost || !user.boost.purchased) {
-    return res.status(403).json({ error: 'Boost required to withdraw' });
-  }
-  
-  const balance = user.balances[crypto] || 0;
-  if (balance < amount) {
-    return res.status(400).json({ error: 'Insufficient balance' });
-  }
-  
-  user.balances[crypto] = Number((balance - amount).toFixed(8));
-  
-  const userKey = getUserKey(req);
-  users.set(userKey, user);
-  
-  res.json({
-    success: true,
-    message: `Successfully withdrew ${amount} ${crypto}`,
-    newBalance: user.balances[crypto]
-  });
-});
-
 app.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
   console.log(`Admin Telegram ID: ${ADMIN_TELEGRAM_ID}`);
+  
+  // Завантажуємо користувачів при старті
+  if (DB_MODE === 'jsonbin') {
+    loadUsersFromJSONBin().then(() => {
+      console.log('✓ JSONBin users loaded');
+    });
+    
+    // Зберігаємо користувачів кожні 30 секунд
+    setInterval(saveUsersToJSONBin, 30000);
+  }
 });
