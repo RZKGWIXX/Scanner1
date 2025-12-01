@@ -112,6 +112,10 @@ async function loadUsersFromJSONBin() {
         usersArray.forEach(user => {
           const key = user.telegramUser?.id ? `tg_${user.telegramUser.id}` : user.key;
           users.set(key, user);
+          // Також восстанавливаємо telegramUserById
+          if (user.telegramUser && user.telegramUser.id) {
+            telegramUserById.set(user.telegramUser.id, user.telegramUser);
+          }
         });
         console.log(`✓ Loaded ${users.size} users from JSONBin`);
       }
