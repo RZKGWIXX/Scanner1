@@ -44,6 +44,7 @@
   let scanning = false;
   let baseScanDelay = 2000;
   let currentProfile = null;
+  let isAdmin = false;
 
   function loadScript(src) {
     return new Promise((resolve, reject) => {
@@ -63,18 +64,18 @@
     try {
       const r = await fetch(manifestUrl, { method: 'GET' });
       if (!r.ok) {
-        showBoostMessage('⚠️ TON manifest not available at ' + MANIFEST_PATH + '. Place the file in public/ and ensure correct name.', 'error');
+        showBoostMessage('⚠️ TON manifest not available', 'error');
         return;
       }
     } catch (e) {
-      showBoostMessage('⚠️ Failed to fetch TON manifest. Check file and CORS.', 'error');
+      showBoostMessage('⚠️ Failed to fetch TON manifest', 'error');
       return;
     }
 
     try {
       if (!window.TON_CONNECT_UI) await loadScript('https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js');
     } catch (e) {
-      showBoostMessage('⚠️ Failed to load TON Connect UI library.', 'error');
+      showBoostMessage('⚠️ Failed to load TON Connect UI library', 'error');
       return;
     }
 
@@ -112,7 +113,7 @@
         }
       });
     } catch (e) {
-      showBoostMessage('⚠️ TON Connect initialization failed. Check manifest and library.', 'error');
+      showBoostMessage('⚠️ TON Connect initialization failed', 'error');
     }
   }
 
@@ -228,13 +229,6 @@
         telegramAvatar.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=8b5cf6&color=fff&size=128`;
       }
       telegramUserDiv.classList.remove('hidden');
-    } else if (profile && profile.wallet && profile.wallet.address) {
-      const wa = profile.wallet.address;
-      telegramUsername.innerText = wa;
-      telegramAvatar.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(wa)}&background=8b5cf6&color=fff&size=128`;
-      telegramUserDiv.classList.remove('hidden');
-    } else {
-      telegramUserDiv.classList.add('hidden');
     }
   }
 
@@ -244,12 +238,168 @@
     return await res.json();
   }
 
+  function renderAdminPanel() {
+    if (!isAdmin) return;
+    
+    const adminBtn = document.querySelector('[data-page="admin"]');
+    if (adminBtn) {
+      adminBtn.classList.remove('hidden');
+      
+      // Load admin stats when admin panel becomes visible
+      loadAdminStats();
+    }
+  }
+
+  async function loadAdminStats() {
+    try {
+      const res = await fetch(API_BASE + '/api/admin/stats');
+      const data = await res.json();
+      document.getElementById('adminTotalUsers').innerText = data.totalUsers || 0;
+      document.getElementById('adminActiveBoosts').innerText = data.activeBoosts || 0;
+      document.getElementById('adminTotalScans').innerText = data.totalScans || 0;
+    } catch (e) {
+      console.error('Failed to load admin stats:', e);
+    }
+  }
+
+  async function searchUser() {
+    const adminSearchInput = document.getElementById('adminSearchInput');
+    const username = adminSearchInput.value.trim();
+    if (!username) return;
+    
+    try {
+      const res = await fetch(API_BASE + '/api/admin/search-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username })
+      });
+      
+      if (!res.ok) {
+        document.getElementById('adminSearchResults').innerHTML = '<p style="color: #ef4444; padding: 20px; text-align: center;">User not found</p>';
+        return;
+      }
+      
+      const data = await res.json();
+      displayUserResult(data.user);
+    } catch (e) {
+      console.error('Search error:', e);
+      document.getElementById('adminSearchResults').innerHTML = '<p style="color: #ef4444; padding: 20px; text-align: center;">Search failed</p>';
+    }
+  }
+
+  function displayUserResult(user) {
+    const avatarUrl = user.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.first_name || 'User')}&background=8b5cf6&color=fff&size=128`;
+    
+    const html = `
+      <div class="user-result" style="background: rgba(26, 35, 50, 0.6); border: 1px solid rgba(139, 92, 246, 0.2); border-radius: 16px; padding: 20px; margin-top: 20px;">
+        <div class="user-result-header" style="display: flex; gap: 16px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid rgba(139, 92, 246, 0.2);">
+          <img src="${avatarUrl}" alt="avatar" class="user-avatar" style="width: 64px; height: 64px; border-radius: 50%; border: 2px solid rgba(139, 92, 246, 0.4); object-fit: cover;"/>
+          <div class="user-info">
+            <h4 style="font-size: 18px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;">${user.username ? '@' + user.username : user.first_name}</h4>
+            <p style="color: var(--text-secondary); font-size: 14px;">ID: ${user.id}</p>
+          </div>
+        </div>
+        
+        <div class="user-details" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px;">
+          <div class="detail-item" style="padding: 12px; background: rgba(139, 92, 246, 0.05); border-radius: 12px;">
+            <div class="detail-label" style="color: var(--text-secondary); font-size: 12px; margin-bottom: 6px;">Total Balance</div>
+            <div class="detail-value" style="font-size: 18px; font-weight: 700; color: var(--accent-cyan);">$${fmtUSD(user.totalUsd)}</div>
+          </div>
+          <div class="detail-item" style="padding: 12px; background: rgba(139, 92, 246, 0.05); border-radius: 12px;">
+            <div class="detail-label" style="color: var(--text-secondary); font-size: 12px; margin-bottom: 6px;">Current Boost</div>
+            <div class="detail-value" style="font-size: 18px; font-weight: 700; color: var(--accent-purple);">${user.boost && user.boost.purchased ? user.boost.amount + ' TON' : 'None'}</div>
+          </div>
+          <div class="detail-item" style="padding: 12px; background: rgba(139, 92, 246, 0.05); border-radius: 12px;">
+            <div class="detail-label" style="color: var(--text-secondary); font-size: 12px; margin-bottom: 6px;">Speed</div>
+            <div class="detail-value" style="font-size: 18px; font-weight: 700; color: var(--accent-cyan);">${user.speedMultiplier}x</div>
+          </div>
+          <div class="detail-item" style="padding: 12px; background: rgba(139, 92, 246, 0.05); border-radius: 12px;">
+            <div class="detail-label" style="color: var(--text-secondary); font-size: 12px; margin-bottom: 6px;">Scanned</div>
+            <div class="detail-value" style="font-size: 18px; font-weight: 700; color: var(--accent-cyan);">${user.scannedWallets || 0}</div>
+          </div>
+        </div>
+        
+        <div class="boost-control">
+          <h5 style="color: var(--text-primary); font-size: 16px; font-weight: 700; margin-bottom: 12px;">Grant Boost</h5>
+          <div class="boost-options" id="boostOptions" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px;">
+            <div class="boost-option" data-amount="10" style="padding: 12px; background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.2); border-radius: 10px; text-align: center; cursor: pointer; transition: all 0.3s ease;">
+              <div class="boost-option-label" style="color: var(--text-secondary); font-size: 12px; margin-bottom: 4px;">Basic</div>
+              <div class="boost-option-value" style="color: var(--accent-purple); font-weight: 700;">10 TON</div>
+            </div>
+            <div class="boost-option" data-amount="30" style="padding: 12px; background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.2); border-radius: 10px; text-align: center; cursor: pointer; transition: all 0.3s ease;">
+              <div class="boost-option-label" style="color: var(--text-secondary); font-size: 12px; margin-bottom: 4px;">Pro</div>
+              <div class="boost-option-value" style="color: var(--accent-purple); font-weight: 700;">30 TON</div>
+            </div>
+            <div class="boost-option" data-amount="100" style="padding: 12px; background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.2); border-radius: 10px; text-align: center; cursor: pointer; transition: all 0.3s ease;">
+              <div class="boost-option-label" style="color: var(--text-secondary); font-size: 12px; margin-bottom: 4px;">Ultra</div>
+              <div class="boost-option-value" style="color: var(--accent-purple); font-weight: 700;">100 TON</div>
+            </div>
+            <div class="boost-option" data-amount="130" style="padding: 12px; background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.2); border-radius: 10px; text-align: center; cursor: pointer; transition: all 0.3s ease;">
+              <div class="boost-option-label" style="color: var(--text-secondary); font-size: 12px; margin-bottom: 4px;">Extreme</div>
+              <div class="boost-option-value" style="color: var(--accent-purple); font-weight: 700;">130 TON</div>
+            </div>
+          </div>
+          <button class="btn-grant-boost" id="grantBoostBtn" data-user-id="${user.id}" style="width: 100%; padding: 12px; background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple)); color: white; border: none; border-radius: 10px; font-weight: 700; cursor: pointer; transition: all 0.3s ease;">Grant Boost</button>
+        </div>
+      </div>
+    `;
+    
+    document.getElementById('adminSearchResults').innerHTML = html;
+    
+    // Setup boost option selection
+    let selectedBoost = null;
+    document.querySelectorAll('.boost-option').forEach(opt => {
+      opt.addEventListener('click', function() {
+        document.querySelectorAll('.boost-option').forEach(o => o.style.borderColor = 'rgba(139, 92, 246, 0.2)');
+        this.style.borderColor = 'rgba(139, 92, 246, 0.6)';
+        this.style.background = 'rgba(139, 92, 246, 0.2)';
+        selectedBoost = this.dataset.amount;
+      });
+    });
+    
+    // Setup grant boost button
+    document.getElementById('grantBoostBtn').addEventListener('click', async function() {
+      if (!selectedBoost) {
+        alert('Please select a boost package first');
+        return;
+      }
+      
+      const userId = parseInt(this.dataset.userId);
+      try {
+        const res = await fetch(API_BASE + '/api/admin/grant-boost', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, boostAmount: selectedBoost })
+        });
+        
+        const data = await res.json();
+        if (data.success) {
+          alert('✅ Boost granted successfully!');
+          loadAdminStats();
+          searchUser(); // Refresh user data
+        } else {
+          alert('❌ Failed to grant boost: ' + (data.error || 'Unknown error'));
+        }
+      } catch (e) {
+        console.error('Grant boost error:', e);
+        alert('❌ Failed to grant boost');
+      }
+    });
+  }
+
   async function refreshProfile() {
     try {
       const p = await fetchProfile();
       currentProfile = p;
+      isAdmin = p.isAdmin || false;
+      
       updateNeuralStatus(p);
       updateTelegramUser(p);
+      
+      // Render admin panel if admin
+      if (isAdmin && !document.querySelector('.admin-panel')) {
+        renderAdminPanel();
+      }
 
       const keys = Object.keys(p.balances || {});
       balancesList.innerHTML = '';
@@ -304,7 +454,6 @@
       }
     } catch (e) {
       console.error('Profile refresh error:', e);
-      showBoostMessage('⚠️ Failed to load profile. Check server.', 'error');
     }
   }
 
@@ -413,47 +562,70 @@
   startScanBtn.addEventListener('click', () => startContinuousScan());
   stopScanBtn.addEventListener('click', () => { scanning = false; });
 
-  // Delegated withdraw handler
+  // Event delegation for withdraw buttons
   document.addEventListener('click', function(e) {
-    const btn = e.target.closest && e.target.closest('.btn-withdraw');
-    if (!btn) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const crypto = btn.getAttribute('data-crypto') || btn.dataset.crypto;
-    handleWithdraw(crypto);
+    if (e.target.classList.contains('btn-withdraw')) {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      const crypto = e.target.dataset.crypto;
+      if (!crypto) return;
+      
+      if (currentProfile && currentProfile.boost && currentProfile.boost.purchased) {
+        // Show withdraw prompt
+        const li = e.target.closest('.profile-balance-item');
+        if (!li) return;
+        
+        const balanceText = li.querySelector('.balance-amount').innerText;
+        const match = balanceText.match(/^([\d.]+)/);
+        const maxAmount = match ? parseFloat(match[1]) : 0;
+        
+        const withdrawAmount = prompt(`Enter amount of ${crypto} to withdraw (max: ${maxAmount}):`, '0');
+        if (withdrawAmount !== null && withdrawAmount.trim() !== '') {
+          const withdrawVal = parseFloat(withdrawAmount);
+          if (withdrawVal > 0 && withdrawVal <= maxAmount) {
+            performWithdraw(crypto, withdrawVal);
+          } else {
+            alert('Invalid withdraw amount');
+          }
+        }
+      } else {
+        // Show boost required modal
+        const modal = document.getElementById('withdrawModal');
+        if (modal) {
+          modal.classList.add('active');
+          modal.style.display = 'flex';
+        }
+      }
+    }
   });
 
-  function handleWithdraw(crypto) {
+  async function performWithdraw(crypto, amount) {
     try {
-      const modal = document.getElementById('withdrawModal');
-      if (!modal) {
-        console.error('Modal not found!');
-        return;
+      const res = await fetch(API_BASE + '/api/withdraw', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ crypto, amount })
+      });
+      
+      const data = await res.json();
+      if (data.success) {
+        alert(`✅ Successfully withdrew ${amount} ${crypto}!`);
+        await refreshProfile();
+      } else {
+        alert(`❌ Withdrawal failed: ${data.error}`);
       }
-      modal.classList.add('active');
-      modal.style.display = 'flex';
-      modal.setAttribute('aria-hidden', 'false');
-      modal.style.zIndex = 9999;
-      const reqText = modal.querySelector('.modal-text');
-      if (reqText) {
-        reqText.innerHTML = `To withdraw <strong>${crypto}</strong>, you need to purchase at least a <strong>Basic Boost (10 TON)</strong>.`;
-      }
-      const primary = modal.querySelector('.modal-footer .gradient-btn.full');
-      if (primary) primary.focus();
     } catch (e) {
-      console.error('Error in handleWithdraw:', e);
+      console.error('Withdraw error:', e);
+      alert('❌ Withdrawal failed');
     }
   }
 
   window.closeWithdrawModal = function() {
-    try {
-      const modal = document.getElementById('withdrawModal');
-      if (!modal) return;
+    const modal = document.getElementById('withdrawModal');
+    if (modal) {
       modal.classList.remove('active');
       modal.style.display = 'none';
-      modal.setAttribute('aria-hidden', 'true');
-    } catch (e) {
-      console.error('Error closing withdraw modal:', e);
     }
   };
 
@@ -475,16 +647,31 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ telegramUser: user })
-      }).then(res => res.json()).then(data => refreshProfile()).catch(err => console.error('Failed to store Telegram user:', err));
+      }).then(res => res.json()).then(() => refreshProfile()).catch(console.error);
     }
-  } else {
-    console.log('Not running in Telegram WebApp');
   }
 
   async function init() {
     console.log('App initializing...');
     await refreshProfile();
     initTonConnect();
+    
+    // Setup admin panel search
+    const adminSearchInput = document.getElementById('adminSearchInput');
+    if (adminSearchInput) {
+      adminSearchInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') searchUser();
+      });
+      
+      adminSearchInput.addEventListener('input', () => {
+        // Clear results on input change
+        const resultsDiv = document.getElementById('adminSearchResults');
+        if (resultsDiv && adminSearchInput.value.trim() === '') {
+          resultsDiv.innerHTML = '';
+        }
+      });
+    }
+    
     setInterval(() => {
       if (currentProfile) updateNeuralStatus(currentProfile);
     }, 2000);

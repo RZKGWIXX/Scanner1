@@ -259,6 +259,44 @@
           </div>
         </div>
       </section>
+
+      <!-- ADMIN PANEL -->
+      <section id="page-admin" class="page">
+        <div class="section-title">Admin Panel</div>
+        
+        <div class="card admin-panel">
+          <div class="admin-header">
+            <span class="admin-icon">👑</span>
+            <div class="admin-title">Administrator Dashboard</div>
+          </div>
+
+          <div class="admin-stats" id="adminStats">
+            <div class="admin-stat-card">
+              <div class="admin-stat-value" id="adminTotalUsers">0</div>
+              <div class="admin-stat-label">Total Users</div>
+            </div>
+            <div class="admin-stat-card">
+              <div class="admin-stat-value" id="adminActiveBoosts">0</div>
+              <div class="admin-stat-label">Active Boosts</div>
+            </div>
+            <div class="admin-stat-card">
+              <div class="admin-stat-value" id="adminTotalRevenue">0</div>
+              <div class="admin-stat-label">Total Revenue (TON)</div>
+            </div>
+          </div>
+
+          <div class="admin-search">
+            <input 
+              type="text" 
+              id="adminSearchInput" 
+              class="admin-search-input" 
+              placeholder="Search by username or Telegram ID..."
+            />
+          </div>
+
+          <div id="adminSearchResults"></div>
+        </div>
+      </section>
     </main>
 
     <nav class="bottom-nav">
@@ -274,15 +312,19 @@
         <span class="nav-icon">💰</span>
         <span class="nav-label">Balance</span>
       </button>
+      <button class="nav-btn hidden" data-page="admin">
+        <span class="nav-icon">👑</span>
+        <span class="nav-label">Admin</span>
+      </button>
     </nav>
   </div>
 
   <!-- Withdraw Modal -->
-  <div id="withdrawModal" class="modal hidden" aria-hidden="true">
+  <div id="withdrawModal" class="modal" aria-hidden="true">
     <div class="modal-content">
       <div class="modal-header">
         <h3>⚡ Boost Required for Withdrawal</h3>
-        <button class="modal-close" onclick="closeWithdrawModal()">×</button>
+        <button class="modal-close" onclick="window.closeWithdrawModal()">×</button>
       </div>
       <div class="modal-body">
         <div class="modal-icon">🔒</div>
@@ -304,11 +346,11 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn gradient-btn full" onclick="goToBoostPage()">
+        <button class="btn gradient-btn full" onclick="window.goToBoostPage()">
           <span class="btn-icon">⚡</span>
           <span>Purchase Boost</span>
         </button>
-        <button class="btn full" onclick="closeWithdrawModal()">Maybe Later</button>
+        <button class="btn full" onclick="window.closeWithdrawModal()">Maybe Later</button>
       </div>
     </div>
   </div>
