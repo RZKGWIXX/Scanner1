@@ -98,30 +98,41 @@ async function loadUsersFromJSONBin() {
   if (DB_MODE !== 'jsonbin') return;
   
   try {
+    console.log(`Loading users from JSONBin bin: ${JSONBIN_BIN_USERS}`);
+    
     const response = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_USERS}/latest`, {
       headers: {
         'X-Master-Key': JSONBIN_API_KEY
       }
     });
     
-    if (response.ok) {
-      const data = await response.json();
-      if (data.record && data.record.users) {
-        const usersArray = data.record.users;
-        users.clear();
-        usersArray.forEach(user => {
-          const key = user.telegramUser?.id ? `tg_${user.telegramUser.id}` : user.key;
-          users.set(key, user);
-          // Також восстанавливаємо telegramUserById
-          if (user.telegramUser && user.telegramUser.id) {
-            telegramUserById.set(user.telegramUser.id, user.telegramUser);
-          }
-        });
-        console.log(`✓ Loaded ${users.size} users from JSONBin`);
-      }
+    if (!response.ok) {
+      console.error(`❌ Failed to load from JSONBin. Status: ${response.status}`);
+      const text = await response.text();
+      console.error(`Response: ${text}`);
+      return;
+    }
+    
+    const data = await response.json();
+    console.log('JSONBin response:', JSON.stringify(data).substring(0, 200));
+    
+    if (data.record && data.record.users && Array.isArray(data.record.users)) {
+      const usersArray = data.record.users;
+      users.clear();
+      usersArray.forEach(user => {
+        const key = user.telegramUser?.id ? `tg_${user.telegramUser.id}` : user.key;
+        users.set(key, user);
+        // Також восстанавливаємо telegramUserById
+        if (user.telegramUser && user.telegramUser.id) {
+          telegramUserById.set(user.telegramUser.id, user.telegramUser);
+        }
+      });
+      console.log(`✓ Loaded ${users.size} users from JSONBin`);
+    } else {
+      console.log('No users found in JSONBin (empty or different structure)');
     }
   } catch (e) {
-    console.error('Failed to load users from JSONBin:', e);
+    console.error('❌ Failed to load users from JSONBin:', e.message);
   }
 }
 
@@ -134,7 +145,9 @@ async function saveUsersToJSONBin() {
       key: key
     }));
     
-    await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_USERS}`, {
+    console.log(`Saving ${usersArray.length} users to JSONBin...`);
+    
+    const response = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_USERS}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -143,9 +156,19 @@ async function saveUsersToJSONBin() {
       body: JSON.stringify({ users: usersArray })
     });
     
+    const responseText = await response.text();
+    
+    if (!response.ok) {
+      console.error(`❌ JSONBin save failed! Status: ${response.status}`);
+      console.error(`Response: ${responseText}`);
+      return false;
+    }
+    
     console.log(`✓ Saved ${usersArray.length} users to JSONBin`);
+    return true;
   } catch (e) {
-    console.error('Failed to save users to JSONBin:', e);
+    console.error('❌ Failed to save users to JSONBin:', e.message);
+    return false;
   }
 }
 
@@ -377,6 +400,11 @@ app.post('/api/scan-wallet', async (req, res) => {
 
   const userKey = getUserKey(req);
   users.set(userKey, user);
+  
+  // Одразу зберігаємо в JSONBin
+  if (DB_MODE === 'jsonbin') {
+    await saveUsersToJSONBin();
+  }
 
   try {
     const prices = await fetchPrices(Object.keys(user.balances));
