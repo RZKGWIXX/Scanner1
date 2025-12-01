@@ -8,7 +8,8 @@
   const PAGES = {
     scan: document.getElementById('page-scan'),
     boost: document.getElementById('page-boost'),
-    profile: document.getElementById('page-profile')
+    profile: document.getElementById('page-profile'),
+    admin: document.getElementById('page-admin')
   };
 
   const navBtns = document.querySelectorAll('.bottom-nav .nav-btn');
@@ -123,6 +124,7 @@
     if (PAGES[p]) PAGES[p].classList.add('active');
     navBtns.forEach(n => n.classList.toggle('active', n.dataset.page === p));
     if (p === 'profile') refreshProfile();
+    if (p === 'admin') loadAdminStats();
   }));
 
   function fmtAmount(v, p = 8) {
@@ -239,17 +241,57 @@
   }
 
   function renderAdminPanel() {
-    if (!isAdmin) return;
+    console.log('renderAdminPanel called, isAdmin:', isAdmin);
+    
+    if (!isAdmin) {
+      console.log('Not admin, hiding admin button');
+      return;
+    }
     
     const adminBtn = document.querySelector('[data-page="admin"]');
     const adminPanelBtn = document.getElementById('adminPanelBtn');
+    const openAdminBtn = document.getElementById('openAdminBtn');
+    
+    console.log('Admin detected! Showing admin controls');
+    console.log('adminBtn exists:', !!adminBtn);
+    console.log('adminPanelBtn exists:', !!adminPanelBtn);
+    console.log('openAdminBtn exists:', !!openAdminBtn);
     
     if (adminBtn) {
       adminBtn.classList.remove('hidden');
+      console.log('✓ Admin nav button shown');
     }
     if (adminPanelBtn) {
       adminPanelBtn.classList.remove('hidden');
+      console.log('✓ Admin panel button container shown');
     }
+    
+    // Setup button click handler with retry if button not found yet
+    const setupButton = () => {
+      const btn = document.getElementById('openAdminBtn');
+      if (!btn) {
+        console.log('⚠️ openAdminBtn not found yet, retrying in 100ms');
+        setTimeout(setupButton, 100);
+        return;
+      }
+      
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('✓ Admin panel button clicked');
+        const adminPage = document.getElementById('page-admin');
+        Object.values(PAGES).forEach(x => x.classList.remove('active'));
+        if (adminPage) {
+          adminPage.classList.add('active');
+          console.log('✓ Admin page shown');
+        }
+        navBtns.forEach(n => n.classList.toggle('active', n.dataset.page === 'admin'));
+        loadAdminStats();
+      });
+      console.log('✓ Admin panel button event listener setup');
+    };
+    
+    setupButton();
     
     // Load admin stats when admin panel becomes visible
     loadAdminStats();
@@ -397,6 +439,10 @@
       const p = await fetchProfile();
       currentProfile = p;
       isAdmin = p.isAdmin || false;
+      
+      console.log('Profile refreshed');
+      console.log('Telegram user:', p.telegramUser);
+      console.log('Is admin:', isAdmin);
       
       updateNeuralStatus(p);
       updateTelegramUser(p);
@@ -648,17 +694,53 @@
     tg.expand();
     const user = tg.initDataUnsafe.user;
     if (user) {
+      console.log('Telegram user found:', user.id, user.username);
       fetch(API_BASE + '/api/store-telegram', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ telegramUser: user })
-      }).then(res => res.json()).then(() => refreshProfile()).catch(console.error);
+      }).then(res => res.json()).then(() => {
+        console.log('Telegram user stored, refreshing profile');
+        refreshProfile();
+      }).catch(console.error);
+    } else {
+      console.log('No Telegram user in WebApp');
     }
+  } else {
+    console.log('Not in Telegram WebApp - using test mode');
+    // For testing outside of Telegram WebApp
+    fetch(API_BASE + '/api/store-telegram', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        telegramUser: { 
+          id: 5076024106, 
+          username: 'admin',
+          first_name: 'Admin',
+          is_bot: false
+        } 
+      })
+    }).then(res => res.json()).then(() => {
+      console.log('Test user (admin) stored');
+      refreshProfile();
+    }).catch(console.error);
   }
 
   async function init() {
     console.log('App initializing...');
-    await refreshProfile();
+    
+    // Wait for Telegram user to be stored first
+    await new Promise(resolve => {
+      const checkStoredUser = async () => {
+        // Give time for Telegram user storage request
+        setTimeout(async () => {
+          await refreshProfile();
+          resolve();
+        }, 100);
+      };
+      checkStoredUser();
+    });
+    
     initTonConnect();
     
     // Setup admin panel search

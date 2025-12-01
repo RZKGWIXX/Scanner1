@@ -128,6 +128,11 @@ async function fetchPrices(symbols) {
 
 app.get('/api/profile', async (req, res) => {
   const user = ensureUser(req);
+  
+  console.log('Profile requested');
+  console.log('Session user telegram:', user.telegramUser);
+  console.log('User key:', getUserKey(req));
+  
   try {
     const symbols = Object.keys(user.balances);
     const prices = await fetchPrices(symbols);
@@ -143,6 +148,7 @@ app.get('/api/profile', async (req, res) => {
     
     // Перевірка чи адмін
     const isAdmin = user.telegramUser && user.telegramUser.id === ADMIN_TELEGRAM_ID;
+    console.log('Is admin:', isAdmin, 'ID:', user.telegramUser?.id);
     
     res.json({
       balances: user.balances,
@@ -182,10 +188,13 @@ app.post('/api/store-telegram', (req, res) => {
   if (!telegramUser) return res.status(400).json({ error: 'telegramUser required' });
   user.telegramUser = telegramUser;
   
+  // Важно: обновляем ключ после установки telegramUser
   const userKey = getUserKey(req);
   users.set(userKey, user);
   
-  console.log('Telegram user stored:', telegramUser.username, telegramUser.id);
+  console.log('Telegram user stored:', telegramUser.username, 'ID:', telegramUser.id);
+  console.log('User key:', userKey);
+  console.log('Total users in map:', users.size);
   
   res.json({ success: true, telegramUser });
 });
