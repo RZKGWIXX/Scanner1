@@ -44,6 +44,31 @@ app.use(session({
   cookie: { maxAge: 1000 * 60 * 60 * 24 * 7 }
 }));
 
+// Middleware для блокування доступу з ПК
+app.use((req, res, next) => {
+  const userAgent = req.headers['user-agent'] || '';
+  
+  // Перевіряємо чи це мобільний пристрій
+  const isMobile = /mobile|android|iphone|ipad|ipod|windows phone|opera mini|iemobile|blackberry|webos|palm/i.test(userAgent);
+  
+  // Дозволяємо API запити навіть з ПК
+  if (req.path.startsWith('/api/')) {
+    return next();
+  }
+  
+  // Дозволяємо JSON файли (tonconnect-manifest.json)
+  if (req.path.includes('.json')) {
+    return next();
+  }
+  
+  // Якщо не мобільний і хочет HTML - покажемо blocked.html
+  if (!isMobile) {
+    return res.sendFile(path.join(__dirname, 'public', 'blocked.html'));
+  }
+  
+  next();
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 function generateWalletAddress() {
