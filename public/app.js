@@ -242,12 +242,17 @@
     if (!isAdmin) return;
     
     const adminBtn = document.querySelector('[data-page="admin"]');
+    const adminPanelBtn = document.getElementById('adminPanelBtn');
+    
     if (adminBtn) {
       adminBtn.classList.remove('hidden');
-      
-      // Load admin stats when admin panel becomes visible
-      loadAdminStats();
     }
+    if (adminPanelBtn) {
+      adminPanelBtn.classList.remove('hidden');
+    }
+    
+    // Load admin stats when admin panel becomes visible
+    loadAdminStats();
   }
 
   async function loadAdminStats() {

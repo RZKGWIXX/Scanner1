@@ -5,11 +5,17 @@ const session = require('express-session');
 const path = require('path');
 const cors = require('cors');
 const fetch = global.fetch || require('node-fetch');
+require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const TON_RECEIVE_ADDRESS = process.env.TON_ADDRESS || 'UQAhk2ixejZ9_K0MPQjH3CUN4_PSDUfZEGaXtKU78nh-0Fdn';
 const ADMIN_TELEGRAM_ID = 5076024106;
+
+// JSON Bin Configuration
+const JSONBIN_COLLECTION_ID = process.env.JSONBIN_COLLECTION_ID || '692dd5ef43b1c97be9d100f1';
+const JSONBIN_API_KEY = process.env.JSONBIN_API_KEY || '';
+const DB_MODE = process.env.DB_MODE || 'memory';
 
 const COIN_MAP = {
   TON: 'toncoin', BTC: 'bitcoin', ETH: 'ethereum',
