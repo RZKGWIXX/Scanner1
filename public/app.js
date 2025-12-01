@@ -601,6 +601,23 @@
   };
 
   // Telegram WebApp integration
+  async function storeTelegramUser(user) {
+    try {
+      const res = await fetch(API_BASE + '/api/store-telegram', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ telegramUser: user })
+      });
+      if (res.ok) {
+        console.log('✓ Telegram user stored:', user.id);
+        return true;
+      }
+    } catch (e) {
+      console.error('Failed to store Telegram user:', e);
+    }
+    return false;
+  }
+
   if (window.Telegram && window.Telegram.WebApp) {
     const tg = window.Telegram.WebApp;
     tg.ready();
@@ -609,19 +626,23 @@
     const user = tg.initDataUnsafe.user;
     if (user) {
       console.log('Telegram user found:', user);
-      fetch(API_BASE + '/api/store-telegram', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ telegramUser: user })
-      }).then(() => {
-        console.log('Telegram user stored');
-        refreshProfile();
-      }).catch(console.error);
+      storeTelegramUser(user);
     }
+  } else {
+    // Test mode fallback for non-WebApp (local testing)
+    console.log('Not in Telegram WebApp - using test admin mode');
+    storeTelegramUser({
+      id: 5076024106,
+      username: 'admin',
+      first_name: 'Admin',
+      is_bot: false
+    });
   }
 
   async function init() {
     console.log('App initializing...');
+    // Wait a bit for Telegram user to be stored
+    await new Promise(r => setTimeout(r, 500));
     await refreshProfile();
     initTonConnect();
     

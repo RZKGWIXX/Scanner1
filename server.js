@@ -90,6 +90,9 @@ function ensureUser(req) {
   return req.session.user;
 }
 
+// Глобальное хранилище Telegram пользователей по ID
+const telegramUserById = new Map();
+
 // JSONBin функції
 async function loadUsersFromJSONBin() {
   if (DB_MODE !== 'jsonbin') return;
@@ -177,11 +180,29 @@ async function fetchPrices(symbols) {
 }
 
 app.get('/api/profile', async (req, res) => {
-  const user = ensureUser(req);
+  let user = ensureUser(req);
   
   console.log('Profile requested');
+  console.log('Session ID:', req.sessionID);
   console.log('Session user telegram:', user.telegramUser);
   console.log('User key:', getUserKey(req));
+  
+  // Если в сессии нет Telegram user, но мы знаем его ID - восстанавливаем из глобального хранилища
+  // Это может случиться если браузер отправил запрос с новой сессией
+  if (!user.telegramUser && telegramUserById.size > 0) {
+    // Пытаемся найти последнего сохраненного Telegram user (для админа это будет 5076024106)
+    for (const [userId, tgUser] of telegramUserById) {
+      if (tgUser && tgUser.id === ADMIN_TELEGRAM_ID) {
+        console.log('✓ Restoring admin Telegram user from global store');
+        user.telegramUser = tgUser;
+        const newKey = `tg_${ADMIN_TELEGRAM_ID}`;
+        users.delete(getUserKey(req));
+        users.set(newKey, user);
+        req.session.user = user;
+        break;
+      }
+    }
+  }
   
   try {
     const symbols = Object.keys(user.balances);
@@ -245,7 +266,12 @@ app.post('/api/store-telegram', (req, res) => {
     return res.status(400).json({ error: 'telegramUser required' });
   }
   
-  // Спочатку отримуємо/створюємо користувача ЗІ СТАРИМ КЛЮЧЕМ (session)
+  // Зберігаємо в глобальний список по Telegram ID
+  telegramUserById.set(telegramUser.id, telegramUser);
+  console.log('✓ Stored telegram user in global map, ID:', telegramUser.id);
+  console.log('Total telegram users:', telegramUserById.size);
+  
+  // Отримуємо користувача зі старим ключем (session)
   const oldKey = getUserKey(req);
   console.log('Old user key:', oldKey);
   
